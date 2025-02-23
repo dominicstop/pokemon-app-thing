@@ -1,3 +1,4 @@
+
 export type PokemonListResponse = {
   count: number;
   next: string | null;
@@ -8,7 +9,11 @@ export type PokemonListResponse = {
   }>;
 };
 
-export type PokemonCard = {
+export type PokemonListResponseResults = PokemonListResponse['results'];
+
+export type PokemonListResponseEntry = PokemonListResponseResults[number];
+
+export type PokemonDetailsResponse = {
   id: number;
   name: string;
   sprites: {
