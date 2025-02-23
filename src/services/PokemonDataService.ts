@@ -1,11 +1,13 @@
 import { TSEventEmitter } from "@dominicstop/ts-event-emitter";
-import { PokemonDataServiceEventEmitter } from "./PokemonDataServiceEvents";
+
+import { OnPokemonNameListDidChangeEvent, PokemonDataServiceEventEmitter } from "./PokemonDataServiceEvents";
 import { PokemonStore } from "./PokemonStore";
-import { PokemonIdToNameMap } from "./PokemonStoreTypes";
+import { PokemonIDToNameMap, PokemonIDToPokemonDetailsMap } from "./PokemonStoreTypes";
 import { PokemonAPI } from "./PokemonAPI";
-import { PokemonDataServiceState, PokemonNameList, PokemonNameListItem, PokemonNameListState } from "./PokemonDataServiceTypes";
+import { PokemonDataServiceState, PokemonDetailsList, PokemonDetailsListState, PokemonNameList, PokemonNameListItem, PokemonNameListState } from "./PokemonDataServiceTypes";
 import { BASE_URL_POKEAPI } from "../services/PokemonAPI";
-import { PokemonListResponseResults } from "./PokemonAPITypes";
+import { PokemonDetailsResponse, PokemonListResponseResults } from "./PokemonAPITypes";
+import { CommonHelpers } from "../utils/CommonHelpers";
 
 
 const SHOULD_LOG = __DEV__ && true;
@@ -15,10 +17,18 @@ export class PokemonDataService {
   eventEmitter: PokemonDataServiceEventEmitter;
 
   pokemonNameList: PokemonNameList = [];
-  pokemonNameMap: PokemonIdToNameMap = {};
+  pokemonNameMap: PokemonIDToNameMap = {};
+
+  pokemonDetailsToLoadQueue: Array<PokemonNameListItem> = [];
+
+  pokemonDetailsList: PokemonDetailsList = [];
+  pokemonDetailsMap: PokemonIDToPokemonDetailsMap = {};
 
   state: PokemonDataServiceState = {
     pokemonNameListState: { 
+      mode: 'NOT_LOADED',
+    },
+    pokemonDetailsListState: {
       mode: 'NOT_LOADED',
     },
   };
@@ -28,10 +38,16 @@ export class PokemonDataService {
 
   constructor() {
     this.eventEmitter = new TSEventEmitter();
+
+    this.eventEmitter.addListener(
+      'onPokemonNameListDidChange', 
+      this._handleOnPokemonNameListDidChange
+    );
   };
 
   async initialize() {
     await this.loadPokemonNameMap();
+    await this.loadPokemonDetailsIfNeeded();
   };
 
   // Section: Setters
@@ -39,7 +55,7 @@ export class PokemonDataService {
 
   private setPokemonNameList(operation: {
     mode: 'map';
-    pokemonNameMap: PokemonIdToNameMap
+    pokemonNameMap: PokemonIDToNameMap
   } | {
     mode: 'list';
     pokemonNameList: PokemonNameList;
@@ -47,26 +63,26 @@ export class PokemonDataService {
     mode: 'appendPokemonListResponseResults'
     results: PokemonListResponseResults;
   }){
-    let nextPokemonNameMap: PokemonIdToNameMap = {};
-    let nextPokemonNameList: PokemonNameList = [];
+    let nextMap: PokemonIDToNameMap = {};
+    let nextList: PokemonNameList = [];
 
     switch(operation.mode){
       case 'list':        
         for(const listItem of operation.pokemonNameList){
-          nextPokemonNameMap[`${listItem.pokemonID}`] = listItem;
+          nextMap[`${listItem.pokemonID}`] = listItem;
         };
 
-        nextPokemonNameList.push(...operation.pokemonNameList);
+        nextList.push(...operation.pokemonNameList);
         break;
 
       case 'map':
-        nextPokemonNameList = Object.values(operation.pokemonNameMap);
-        nextPokemonNameMap = operation.pokemonNameMap;
+        nextList = Object.values(operation.pokemonNameMap);
+        nextMap = operation.pokemonNameMap;
         break;
 
       case 'appendPokemonListResponseResults':
-        nextPokemonNameMap = {...this.pokemonNameMap};
-        nextPokemonNameList.push(...this.pokemonNameList);
+        nextMap = {...this.pokemonNameMap};
+        nextList.push(...this.pokemonNameList);
 
         for(const item of operation.results){
           const pokemonID = PokemonDataServiceHelpers.extractPokemonID(item.url);
@@ -80,28 +96,89 @@ export class PokemonDataService {
             pokemonDetailsURL: item.url,
           }; 
 
-          nextPokemonNameList.push(newListEntry);
-          nextPokemonNameMap[`${pokemonID}`] = newListEntry;
+          nextList.push(newListEntry);
+          nextMap[`${pokemonID}`] = newListEntry;
         };
         break;
     };
 
-    const nextPokemonNameListSorted = 
-      nextPokemonNameList.sort((lhs, rhs) => lhs.pokemonID - rhs.pokemonID);
+    const nextListSorted = nextList.sort((lhs, rhs) => 
+      lhs.pokemonID - rhs.pokemonID
+    );
 
-    this.pokemonNameMap = nextPokemonNameMap;
-    this.pokemonNameList = nextPokemonNameListSorted;
+    this.pokemonNameMap = nextMap;
+    this.pokemonNameList = nextListSorted;
     
     this.eventEmitter.emit('onPokemonNameListDidChange', {
-      pokemonNameMap: nextPokemonNameMap,
-      pokemonNameListSorted: nextPokemonNameListSorted,
+      pokemonNameMap: nextMap,
+      pokemonNameListSorted: nextListSorted,
     });
 
     SHOULD_LOG && console.log(
       'PokemonDataService.setPokemonNameList',
       '\n - operation.mode:', operation.mode, 
-      '\n - pokemonNameMap - count:', Object.keys(nextPokemonNameMap).length, 
-      '\n - pokemonNameList - count:', nextPokemonNameListSorted.length, 
+      '\n - pokemonNameMap - count:', Object.keys(nextMap).length, 
+      '\n - pokemonNameList - count:', nextListSorted.length, 
+    );
+  };
+
+  private updatePokemonDetailsList(operation: {
+    mode: 'setFromMap';
+    pokemonDetailsMap: PokemonIDToPokemonDetailsMap;
+  } | {
+    mode: 'setFromList';
+    pokemonDetailsList: PokemonDetailsList;
+  } | {
+    mode: 'pushPokemonDetailsResponse';
+    pokemonDetailsResponse: PokemonDetailsResponse;
+  }){
+    let nextMap: PokemonIDToPokemonDetailsMap = {};
+    let nextList: PokemonDetailsList = [];
+
+    switch(operation.mode){
+      case 'setFromList':
+        nextList = operation.pokemonDetailsList;
+
+        for(const listItem of operation.pokemonDetailsList){
+          nextMap[`${listItem.id}`] = listItem;
+        };
+        break;
+
+      case 'setFromMap':
+        nextList = Object.values(operation.pokemonDetailsMap);
+        nextMap = operation.pokemonDetailsMap;
+        break;
+
+      case 'pushPokemonDetailsResponse':
+        nextMap = {
+          ...this.pokemonDetailsMap,
+          [operation.pokemonDetailsResponse.id]: {
+            ...operation.pokemonDetailsResponse,
+          },
+        };
+
+        nextList = this.pokemonDetailsList;
+        nextList.push(operation.pokemonDetailsResponse);
+        break;
+    };
+
+    const nextListSorted = nextList.sort((lhs, rhs) => 
+      lhs.id - rhs.id
+    );
+
+    this.pokemonDetailsMap = nextMap;
+    this.pokemonDetailsList = nextListSorted;
+    
+    this.eventEmitter.emit('onPokemonDetailListDidChange', {
+      pokemonDetailsMap: nextMap,
+      pokemonDetailsListSorted: nextListSorted,
+    });
+
+    SHOULD_LOG && console.log(
+      'PokemonDataService.updatePokemonDetailsList',
+      '\n - operation.mode:', operation.mode, 
+      '\n - nextMap - count:', Object.keys(nextMap).length, 
+      '\n - nextListSorted - count:', nextListSorted.length, 
     );
   };
 
@@ -110,11 +187,67 @@ export class PokemonDataService {
     SHOULD_LOG && console.log('setPokemonNameListState:', newState);
   };
 
+  private setPokemonDetailsListState(newState: PokemonDetailsListState) {
+    this.state.pokemonDetailsListState = newState;
+    SHOULD_LOG && console.log('setPokemonDetailsListState:', newState);
+  };
+
   // Section: Getters (Computed Properties)
   // --------------------------------------
 
   didLoadPokemonNameList(): boolean {
     return this.state.pokemonNameListState.mode === 'LOADED';
+  };
+
+  isPokemonDetailsBeingLoaded(): boolean {
+    switch(this.state.pokemonDetailsListState.mode){
+      case 'LOADING_LOCAL':
+      case 'LOADING_REMOTE':
+        return true;
+      
+      default:
+        return false;
+    };
+  };
+
+  getDiffBetweenPokemonNamesAndDetails(): {
+    // already loaded
+    listOfPokemonNamesWithDetails: Array<PokemonNameListItem>;
+    // pending
+    listOfPokemonNamesWithoutDetails: Array<PokemonNameListItem>;
+  } {
+    const listOfPokemonNamesWithDetails: Array<PokemonNameListItem> = [];
+    const listOfPokemonNamesWithoutDetails: Array<PokemonNameListItem> = [];
+
+    for(const pokemonNameItem of this.pokemonNameList){
+      const matchingDetails = this.pokemonDetailsMap[`${pokemonNameItem.pokemonID}`];
+      const hasMatchingDetailsForID = matchingDetails != null;
+
+      if(hasMatchingDetailsForID){
+        listOfPokemonNamesWithDetails.push(pokemonNameItem);
+
+      } else {
+        listOfPokemonNamesWithoutDetails.push(pokemonNameItem);
+      };
+    };
+    
+    return {
+      listOfPokemonNamesWithDetails,
+      listOfPokemonNamesWithoutDetails,
+    };
+  };
+
+  getTotalPokemonCount(): number | null {
+    switch(this.state.pokemonNameListState.mode){
+      case 'LOADING_REMOTE':
+        return this.state.pokemonNameListState.totalItemsToLoad;
+
+      case 'LOADED':
+        return this.pokemonNameList.length;
+
+      default:
+        return null;
+    };
   };
 
   // Section: Loading and Persistence
@@ -140,7 +273,7 @@ export class PokemonDataService {
     };
 
     this.setPokemonNameListState({mode: 'PREPARE_LOADING_REMOTE'});
-    await PokemonAPI.getPokemonListAll(undefined, (args) => {
+    await PokemonAPI.getPokemonNameListAll(undefined, (args) => {
       this.setPokemonNameListState({ 
         mode: 'LOADING_REMOTE',
         totalItemsToLoad: args.listTotalItems,
@@ -157,6 +290,126 @@ export class PokemonDataService {
 
     this.setPokemonNameListState({mode: 'LOADED'});
     PokemonStore.setPokemonIdToNameMap(this.pokemonNameMap);
+  };
+
+  async loadPokemonDetailsIfNeeded(){
+    const delayPerBatchInMS = __DEV__ ? 100 : 50;
+
+    const isAlreadyLoading = this.isPokemonDetailsBeingLoaded();
+    if(isAlreadyLoading){
+      return;
+    };
+
+    const totalPokemonCount = this.getTotalPokemonCount();
+    if(totalPokemonCount == null){
+      throw new Error("Unable to determine total pokemon entries");
+    };
+
+    this.setPokemonNameListState({mode: 'LOADING_LOCAL'});
+
+    const cachedPokemonDetailsMap = 
+      await PokemonStore.getPokemonIDToPokemonDetailsMap();
+
+    let cachedPokemonDetailsCount = 
+      Object.keys(cachedPokemonDetailsMap ?? {}).length;
+
+    const hasPokemonDetailsCache = cachedPokemonDetailsCount > 0;
+    if(hasPokemonDetailsCache){
+      this.updatePokemonDetailsList({
+        mode: 'setFromMap',
+        pokemonDetailsMap: cachedPokemonDetailsMap!,
+      });
+    };
+
+    const updateLoadingStateProgress = () => {
+      const listCurrentItems = this.pokemonDetailsList.length;
+      const listRemainingItems = Math.max(0, totalPokemonCount - listCurrentItems);
+      const listProgressPercent =  listCurrentItems / totalPokemonCount;
+
+      this.setPokemonDetailsListState({
+        mode: 'LOADING_REMOTE',
+        totalItemsLoaded: listCurrentItems,
+        totalItemsToLoad: totalPokemonCount,
+        remainingItemsToLoad: listRemainingItems,
+        loadingProgressPercent: listProgressPercent,
+      });
+    };
+
+    const updateQueueIfNeeded = () => {
+      const isQueueEmpty = this.pokemonDetailsToLoadQueue.length == 0;
+      if(!isQueueEmpty){
+        return;
+      };
+
+      const diff = this.getDiffBetweenPokemonNamesAndDetails();
+      this.pokemonDetailsToLoadQueue.push(...diff.listOfPokemonNamesWithoutDetails);
+
+      SHOULD_LOG && console.log(
+        'PokemonDataService.loadPokemonDetailsIfNeeded',
+        '\n - invoked: updateQueueIfNeeded',
+        '\n - listOfPokemonNamesWithDetails count:', diff.listOfPokemonNamesWithDetails.length,
+        '\n - listOfPokemonNamesWithoutDetails count:', diff.listOfPokemonNamesWithoutDetails.length,
+        '\n - pokemonDetailsToLoadQueue count:', this.pokemonDetailsToLoadQueue.length,
+        '\n'
+      );
+    };
+
+    if(this.pokemonDetailsToLoadQueue.length > 0){
+      updateLoadingStateProgress();
+    };
+
+    while(true){
+      updateQueueIfNeeded();
+      const currentQueueItem = this.pokemonDetailsToLoadQueue.shift();
+
+      SHOULD_LOG && console.log(
+        'PokemonDataService.loadPokemonDetailsIfNeeded',
+        '\n - pokemonDetailsToLoadQueue count:', this.pokemonDetailsToLoadQueue.length,
+        '\n - currentQueueItem.pokemonID', currentQueueItem?.pokemonID,
+        '\n'
+      );
+
+      if(currentQueueItem == null){
+        break;
+      };
+
+      try {
+        const response = 
+          await PokemonAPI.getPokemonDetails(currentQueueItem.pokemonID);
+
+        this.updatePokemonDetailsList({
+          mode: 'pushPokemonDetailsResponse',
+          pokemonDetailsResponse: response,
+        });
+
+        updateLoadingStateProgress();
+        await Promise.all([
+          PokemonStore.setPokemonIDToPokemonDetailsMap(this.pokemonDetailsMap),
+          CommonHelpers.timeout(delayPerBatchInMS),
+        ]);
+
+      } catch(error){
+        console.error(
+          'PokemonDataService.loadPokemonDetailsIfNeeded',
+          '\n - failed to load details for id:', currentQueueItem.pokemonID,
+          '\n - error:', error
+        );
+      };
+    };
+
+    const diff = this.getDiffBetweenPokemonNamesAndDetails();
+    const didLoadAll = diff.listOfPokemonNamesWithoutDetails.length == 0;
+
+    this.setPokemonDetailsListState({
+      mode: didLoadAll ? 'LOADED' : 'NOT_LOADED',
+    });
+  };
+
+  // Section: Handlers
+  // -----------------
+
+  _handleOnPokemonNameListDidChange: OnPokemonNameListDidChangeEvent = () => {
+    this.loadPokemonDetailsIfNeeded();
   };
 };
 

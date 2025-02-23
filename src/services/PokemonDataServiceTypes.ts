@@ -1,8 +1,11 @@
-import { PokemonIdToNameMap } from "./PokemonStoreTypes";
+import { PokemonIDToNameMapEntry, PokemonIDToPokemonDetailsMapEntry } from "./PokemonStoreTypes";
 
 
-export type PokemonNameList = Array<PokemonIdToNameMap[string]>;
-export type PokemonNameListItem = PokemonNameList[number];
+export type PokemonNameListItem = PokemonIDToNameMapEntry;
+export type PokemonNameList = Array<PokemonNameListItem>;
+
+export type PokemonDetailsListItem = PokemonIDToPokemonDetailsMapEntry;
+export type PokemonDetailsList = Array<PokemonDetailsListItem>;
 
 export type PokemonNameListState = {
   mode: 'NOT_LOADED'
@@ -22,6 +25,23 @@ export type PokemonNameListState = {
   mode: 'FAILED'
 };
 
+export type PokemonDetailsListState = {
+  mode: 'NOT_LOADED'
+} | {
+  mode: 'LOADING_LOCAL';
+} | {
+  mode: 'LOADING_REMOTE';
+  totalItemsToLoad: number;
+  totalItemsLoaded: number;
+  remainingItemsToLoad: number;
+  loadingProgressPercent: number;
+} | {
+  mode: 'LOADED'
+} | {
+  mode: 'FAILED'
+};
+
 export type PokemonDataServiceState = {
   pokemonNameListState: PokemonNameListState;
+  pokemonDetailsListState: PokemonDetailsListState;
 };

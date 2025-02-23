@@ -1,11 +1,13 @@
 import { PokemonDetailsResponse } from "./PokemonAPITypes";
 
 
-export type PokemonIdToNameMap = Record<string, {
+export type PokemonIDToNameMap = Record<string, {
   pokemonID: number;
   pokemonName: string;
   pokemonDetailsURL: string;
 }>;
+
+export type PokemonIDToNameMapEntry = PokemonIDToNameMap[string];
 
 export type PokemonIDToPokemonDetailsMap = Record<string, PokemonDetailsResponse>;
 

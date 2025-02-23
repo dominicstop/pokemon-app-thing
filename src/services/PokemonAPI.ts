@@ -58,7 +58,7 @@ export class PokemonAPI {
   // Section: API w/ Extra Logic
   // ---------------------------
 
-  static async getPokemonListAll(
+  static async getPokemonNameListAll(
     options?: {
       limitPerBatch: number,
       delayPerBatchInMS: number,
@@ -93,7 +93,7 @@ export class PokemonAPI {
 
         const listTotalItems = response.count;
         const listCurrentItems = pokemonListItems.length;
-        const listRemainingItems = Math.min(0, listTotalItems - listCurrentItems);
+        const listRemainingItems = Math.max(0, listTotalItems - listCurrentItems);
         const listProgressPercent =  listCurrentItems / listTotalItems;
 
         onUpdateCallback?.({
@@ -121,20 +121,26 @@ export class PokemonAPI {
     };
   };
 
-  // wip
   static async getPokemonDetailsBatched(
     batchOfPokemonID: Array<number>,
-    delayPerBatchInMS: number = 500,
-    onUpdateCallback?: (pokemon: Array<PokemonDetailsResponse>) => void
+    delayPerBatchInMS?: number,
+    onUpdateCallback?: (pokemon: PokemonDetailsResponse) => void
   ): Promise<Array<PokemonDetailsResponse>> {
+
+    const delayPerBatch = delayPerBatchInMS ?? __DEV__ ? 500 : 100;
+
     try {
-      const pokemonListItems: Array<PokemonDetailsResponse> = [];
+      const loadedItems: Array<PokemonDetailsResponse> = [];
       for (const pokemonID of batchOfPokemonID) {
         const pokemonDetails = await this.getPokemonDetails(pokemonID);
-        await CommonHelpers.timeout(delayPerBatchInMS);
+
+        loadedItems.push(pokemonDetails);
+        onUpdateCallback?.(pokemonDetails);
+        
+        await CommonHelpers.timeout(delayPerBatch);
       };
 
-      return pokemonListItems;
+      return loadedItems;
 
     } catch (error) {
       console.error('Error fetching all Pokémon:', error);

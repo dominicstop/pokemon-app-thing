@@ -1,6 +1,6 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PokemonIdToNameMap, PokemonIDToPokemonDetailsMap } from './PokemonStoreTypes';
+import { PokemonIDToNameMap, PokemonIDToPokemonDetailsMap } from './PokemonStoreTypes';
 
 const CACHE_KEYS = {
   POKEMON_NAME_MAP: 'POKEMON_NAME_MAP',
@@ -27,17 +27,16 @@ export class PokemonStore {
       };
 
       const dataParsed = JSON.parse(dataCached);
-      SHOULD_LOG && console.log(
-        'PokemonStore.getData:', 
-        '\n - key:', key,
-        '\n - dataCached key count', dataCached?.length ?? -1
-      );
-
       if(dataParsed == null) {
         return null;
       };
+
+      SHOULD_LOG && console.log(
+        'PokemonStore.getData:', 
+        '\n - key:', key,
+        '\n - dataParsed key count:', Object.keys(dataParsed).length ?? -1
+      );
       
-      // console.log(dataParsed);
       return dataParsed;
 
     } catch (error) {
@@ -80,11 +79,11 @@ export class PokemonStore {
     };
   };
 
-  static async getPokemonIdToNameMap(): Promise<PokemonIdToNameMap | null> {
+  static async getPokemonIdToNameMap(): Promise<PokemonIDToNameMap | null> {
     return await this.getData(CACHE_KEYS.POKEMON_NAME_MAP);
   };
   
-  static async setPokemonIdToNameMap(data: PokemonIdToNameMap): Promise<void> {
+  static async setPokemonIdToNameMap(data: PokemonIDToNameMap): Promise<void> {
     await this.setData(CACHE_KEYS.POKEMON_NAME_MAP, data);
   };
 
