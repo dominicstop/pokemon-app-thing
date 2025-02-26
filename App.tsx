@@ -7,6 +7,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { PokemonProvider } from './src/context/PokemonDataContext';
 import { ROUTE_MAP, RouteEntry } from './src/constants/Routes';
 import { ROUTE_KEYS } from './src/constants/RouteKeys';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 
 const TabNavigator = createBottomTabNavigator();
@@ -42,52 +43,58 @@ export default function App() {
 
   return (
     <PokemonProvider>
-      <NavigationContainer>
-        <TabNavigator.Navigator
-          screenOptions={{
-            tabBarStyle: {
-              backgroundColor: '#fff',
-            },
-          }}
-        >
-          <TabNavigator.Screen 
-            name={ROUTE_MAP.pokemonCardStack.routeName}
-            component={ROUTE_MAP.pokemonCardStack.component} 
-            options={{
-              tabBarIcon: () => (
-                <TabBarIcon
-                  routeEntry={ROUTE_MAP.pokemonCardStack}
-                />
-              ),
+      <GestureHandlerRootView style={styles.rootContainer}>
+        <NavigationContainer>
+          <TabNavigator.Navigator
+            screenOptions={{
+              tabBarStyle: {
+                backgroundColor: '#fff',
+              },
             }}
-          />
-          <TabNavigator.Screen 
-            name={ROUTE_MAP.favorites.routeName}
-            component={ROUTE_MAP.favorites.component}
-            options={{
-              tabBarIcon: () => (
-                <TabBarIcon
-                  routeEntry={ROUTE_MAP.favorites}
-                />
-              ),
-            }}
-          />
-          <TabNavigator.Screen 
-            name={ROUTE_MAP.debug.routeName}
-            component={ROUTE_MAP.debug.component} 
-            options={{
-              tabBarIcon: () => (
-                <TabBarIcon
-                  routeEntry={ROUTE_MAP.debug}
-                />
-              ),
-            }}
-          />
-        </TabNavigator.Navigator>
-      </NavigationContainer>
+          >
+            <TabNavigator.Screen 
+              name={ROUTE_MAP.pokemonCardStack.routeName}
+              component={ROUTE_MAP.pokemonCardStack.component} 
+              options={{
+                tabBarIcon: () => (
+                  <TabBarIcon
+                    routeEntry={ROUTE_MAP.pokemonCardStack}
+                  />
+                ),
+              }}
+            />
+            <TabNavigator.Screen 
+              name={ROUTE_MAP.favorites.routeName}
+              component={ROUTE_MAP.favorites.component}
+              options={{
+                tabBarIcon: () => (
+                  <TabBarIcon
+                    routeEntry={ROUTE_MAP.favorites}
+                  />
+                ),
+              }}
+            />
+            <TabNavigator.Screen 
+              name={ROUTE_MAP.debug.routeName}
+              component={ROUTE_MAP.debug.component} 
+              options={{
+                tabBarIcon: () => (
+                  <TabBarIcon
+                    routeEntry={ROUTE_MAP.debug}
+                  />
+                ),
+              }}
+            />
+          </TabNavigator.Navigator>
+        </NavigationContainer>
+      </GestureHandlerRootView>
+
     </PokemonProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+  },
 });
