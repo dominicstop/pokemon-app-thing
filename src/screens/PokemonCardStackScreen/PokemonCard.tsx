@@ -4,14 +4,7 @@ import { StyleSheet, Text, Image } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Canvas, Circle, Extrapolate, Path } from '@shopify/react-native-skia';
 
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  runOnJS,
-  SharedValue,
-  interpolate,
-} from 'react-native-reanimated';
+import Animated, * as Reanimated from 'react-native-reanimated';
 
 import { PokemonDetailsListItem, PokemonNameListItem } from '../../services/PokemonDataServiceTypes';
 
@@ -25,9 +18,9 @@ export type OnPokemonCardSwipeCompletedEvent =
 export type PokemonCardProps = {
   // 0 = back
   stackIndex: number;
-  stackMaxVisibleCount: number;
+  stackSizeCount: number;
 
-  sharedSwipeProgressPercent: SharedValue<number>;
+  stackIndexAnimated: Reanimated.SharedValue<number>;
 
   pokemonNameItem: PokemonNameListItem;
   pokemonDetailItem: PokemonDetailsListItem | undefined;
@@ -53,24 +46,20 @@ export function PokemonCard(props: PokemonCardProps) {
   const [stackIndex, setStackIndex] = React.useState(props.stackIndex);
 
   const currentStackPosition: StackPositionMode = (() => {
-    if(stackIndex === 0){
+    if(stackIndex === props.stackSizeCount){
       return 'bottomOfStack';
     };
 
-    if(stackIndex === 1){
+    if(stackIndex === (props.stackSizeCount - 1)){
       return 'secondToBottomOfStack';
     };
 
-    const isTopMostInStack = 
-      stackIndex === (props.stackMaxVisibleCount - 1);
-
+    const isTopMostInStack = stackIndex === 0;
     if(isTopMostInStack){
       return 'topOfStack';
     };
 
-    const isSecondToTopOfStack = 
-      stackIndex === (props.stackMaxVisibleCount - 2);
-
+    const isSecondToTopOfStack = stackIndex === 1;
     if(isSecondToTopOfStack){
       return 'secondToTopOfStack';
     };
@@ -109,11 +98,9 @@ export function PokemonCard(props: PokemonCardProps) {
     MARGIN_TOP_NEXT,
   });
 
-  const tempStackOffsetY = useSharedValue(0);
-
-  const offsetGestureX = useSharedValue(0);
-  const offsetGestureY = useSharedValue(0);
-  const offsetRotate = useSharedValue(0);
+  const offsetGestureX = Reanimated.useSharedValue(0);
+  const offsetGestureY = Reanimated.useSharedValue(0);
+  const offsetRotate = Reanimated.useSharedValue(0);
 
   const panGesture = Gesture.Pan()
     .onUpdate((event) => {
@@ -124,14 +111,10 @@ export function PokemonCard(props: PokemonCardProps) {
 
       offsetRotate.value = gesturePercent * 15;
 
-      props.sharedSwipeProgressPercent.value = interpolate(
-        event.translationX, 
-        [0, SWIPE_THRESHOLD_X], 
+      props.stackIndexAnimated.value = Reanimated.interpolate(
+        gesturePercent,
         [0, 1],
-        {
-          extrapolateLeft: Extrapolate.CLAMP,
-          extrapolateRight: Extrapolate.CLAMP,
-        }
+        [props.stackIndex, props.stackIndex + 0.8]
       );
     })
     .onEnd((event) => {
@@ -139,36 +122,38 @@ export function PokemonCard(props: PokemonCardProps) {
         event.translationX > SWIPE_THRESHOLD_X;
 
       if(!didReachSwipeThreshold){
-        // reset
-        props.sharedSwipeProgressPercent.value = withSpring(0);
-
-        offsetGestureX.value = withSpring(0);
-        offsetGestureY.value = withSpring(0)
-        offsetRotate.value = withSpring(0);
+        offsetGestureX.value = Reanimated.withSpring(0);
+        offsetGestureY.value = Reanimated.withSpring(0)
+        offsetRotate.value = Reanimated.withSpring(0);
         return;
       };
 
-      offsetGestureX.value = withSpring(500);
+      offsetGestureX.value = Reanimated.withSpring(
+        Math.sign(event.velocityX) * 500, 
+        { velocity: event.velocityX }
+      );
 
-      props.sharedSwipeProgressPercent.value = withSpring(1, undefined, () => {
-        // tempStackOffsetY.value = MARGIN_TOP_NEXT;
-        // props.sharedSwipeProgressPercent.value = 0;
-        
-        // runOnJS(props.onSwipeRight)(props.pokemonNameItem);
-        runOnJS(props.onSwipeComplete)(props.pokemonNameItem);
-      });
+        props.stackIndexAnimated.value = 
+          Reanimated.withSpring(props.stackIndex + 1);
+
+        Reanimated.runOnJS(props.onSwipeComplete)(props.pokemonNameItem);
     });
 
-  const animatedStyle = useAnimatedStyle(() => {
-    const stackOffsetY = interpolate(
-      props.sharedSwipeProgressPercent.value, 
-      [0, 1],
-      [MARGIN_TOP_CURRENT, MARGIN_TOP_NEXT]
+  const animatedStyle = Reanimated.useAnimatedStyle(() => {
+    const stackIndexReversed = 
+      props.stackSizeCount - props.stackIndexAnimated.value;
+
+    const stackOffsetY = Reanimated.interpolate(
+      props.stackIndexAnimated.value, 
+      [stackIndexAdj - 1, stackIndexAdj, stackIndexAdj + 1],
+      [
+        MARGIN_TOP_CURRENT - STACK_MARGIN_TOP, 
+        MARGIN_TOP_CURRENT, 
+        MARGIN_TOP_NEXT
+      ]
     );
 
-    const totalOffsetY = tempStackOffsetY.value > 0
-      ? tempStackOffsetY.value
-      : stackOffsetY + offsetGestureY.value;
+    const totalOffsetY = stackOffsetY + offsetGestureY.value;
 
     return ({
       transform: [
@@ -188,7 +173,7 @@ export function PokemonCard(props: PokemonCardProps) {
       <Animated.View style={[
         styles.card,
         {
-          zIndex: stackIndex
+          zIndex: props.stackSizeCount - props.stackIndex,
         },
         animatedStyle
       ]}>
@@ -203,6 +188,7 @@ export function PokemonCard(props: PokemonCardProps) {
         </Text>
         <Text>
           {stackIndex}
+          {currentStackPosition}
         </Text>
         <Canvas style={styles.canvas}>
           <Circle
