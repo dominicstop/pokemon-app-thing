@@ -1,59 +1,83 @@
 import React from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 
+import { useSharedValue } from 'react-native-reanimated';
+
 import { usePokemonContext } from '../../hooks/UsePokemonDataContext';
 import { OnPokemonCardSwipeCompletedEvent, OnPokemonCardSwipeRightEvent, PokemonCard } from './PokemonCard';
+import { PokemonNameList } from '../../services/PokemonDataServiceTypes';
+
+
+const MAX_VISIBLE_CARDS = 5;
+
 
 
 export function PokemonCardStackScreen() {
   const { pokemonNamesList, pokemonDetailsMap } = usePokemonContext();
+
   const [currentIndex, setCurrentIndex] = React.useState(0);
+  const [pokemonStack, setPokemonStack] = React.useState<PokemonNameList>([]);
+
+  React.useEffect(() => {
+    if(pokemonNamesList.length < MAX_VISIBLE_CARDS * 2){
+      return;
+    };
+
+    const isPokemonStackEmpty = pokemonStack.length == 0;
+    if(!isPokemonStackEmpty){
+      return;
+    };
+
+    const nextPokemonList = 
+      pokemonNamesList.slice(currentIndex, currentIndex + MAX_VISIBLE_CARDS);
+
+    setPokemonStack(nextPokemonList);
+  }, [pokemonNamesList]);
+  
+  // 0...1
+  const swipeProgressPercent = useSharedValue(0);
 
   const handleSwipeRight: OnPokemonCardSwipeRightEvent = (pokemonNameItem) => {
     console.log(`Liked: ${pokemonNameItem.pokemonID}`);
   };
   
   const handleSwipeComplete: OnPokemonCardSwipeCompletedEvent = (pokemonNameItem) => {
-    setCurrentIndex(prev => prev + 1);
+    const nextIndex = currentIndex + 1;
+
+    console.log('pokemonStack.leng:',pokemonStack.length)
+
+    const pokemonStackNext = pokemonStack.filter((item) => (item.pokemonID !== pokemonNameItem.pokemonID));
+
+
+    setPokemonStack([
+      pokemonNamesList[nextIndex + MAX_VISIBLE_CARDS],
+      ...pokemonStackNext
+    ]);
+    
+    setCurrentIndex(nextIndex);
   };
-  
-  const MAX_VISIBLE_CARDS = 4;
 
-  const visibleCardsList = pokemonNamesList
-    .slice(currentIndex, currentIndex + MAX_VISIBLE_CARDS)
-    .reverse(); 
-
-  const visibleCardsCount = visibleCardsList.length;
+  const visibleCardsCount = pokemonStack.length;
   const hasCardsToShow = visibleCardsCount > 0;
 
   switch(hasCardsToShow){
     case true:
       return (
         <View style={styles.cardStack}>
-          {visibleCardsList.map((item, index) => {
+          {pokemonStack.map((item, index) => {
             const pokemonDetails = pokemonDetailsMap[item.pokemonID];
-            const isCardTopMost = index === 0;
-            
+
             return (
-              <View 
+              <PokemonCard
                 key={`${item.pokemonID}`} 
-                style={[
-                  styles.cardContainer,
-                  !isCardTopMost && styles.stackedCard,
-                  {
-                    top: index * 10,
-                    zIndex: index
-                  }
-                ]}
-              >
-                <PokemonCard
-                  isTopMost={isCardTopMost}
-                  pokemonNameItem={item}
-                  pokemonDetailItem={pokemonDetails}
-                  onSwipeRight={handleSwipeRight}
-                  onSwipeComplete={handleSwipeComplete}
-                />
-              </View>
+                stackIndex={index}
+                stackMaxVisibleCount={MAX_VISIBLE_CARDS}
+                sharedSwipeProgressPercent={swipeProgressPercent}
+                pokemonNameItem={item}
+                pokemonDetailItem={pokemonDetails}
+                onSwipeRight={handleSwipeRight}
+                onSwipeComplete={handleSwipeComplete}
+              />
             );
           })}
         </View>
@@ -76,26 +100,10 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   cardStack: {
+    flex: 1,
     width: '100%',
-    height: 400, 
-    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  cardContainer: {
-    position: 'absolute',
-    width: '100%',
-    maxWidth: 350, 
-    alignSelf: 'center',
-  },
-  stackedCard: {
-    shadowColor: '#000',
-    shadowOffset: { 
-      width: 0, 
-      height: 1
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.5,
   },
   emptyContainer: {
     padding: 20,
