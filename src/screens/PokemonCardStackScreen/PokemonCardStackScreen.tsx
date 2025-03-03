@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 
-import * as Reanimated from 'react-native-reanimated';
+import { useSharedValue } from 'react-native-reanimated';
 
 import { usePokemonContext } from '../../hooks/UsePokemonDataContext';
 import { OnPokemonCardSwipeCompletedEvent, OnPokemonCardSwipeRightEvent, PokemonCard } from './PokemonCard';
@@ -10,22 +10,13 @@ import { PokemonNameList } from '../../services/PokemonDataServiceTypes';
 
 const MAX_VISIBLE_CARDS = 5;
 
+
+
 export function PokemonCardStackScreen() {
   const { pokemonNamesList, pokemonDetailsMap } = usePokemonContext();
 
-  const [ pokemonStack, setPokemonStack ] = React.useState<PokemonNameList>([]);
-
-  const [ currentIndex, setCurrentIndex ] = React.useState(0);
-  const animatedCurrentIndex = Reanimated.useSharedValue(0);
-
-  Reanimated.useAnimatedReaction(
-    () => animatedCurrentIndex.value,
-    (value) => {
-      if (Math.floor(value) !== currentIndex) {
-        Reanimated.runOnJS(setCurrentIndex)(Math.floor(value));
-      }
-    }
-  );
+  const [currentIndex, setCurrentIndex] = React.useState(0);
+  const [pokemonStack, setPokemonStack] = React.useState<PokemonNameList>([]);
 
   React.useEffect(() => {
     if(pokemonNamesList.length < MAX_VISIBLE_CARDS * 2){
@@ -43,6 +34,8 @@ export function PokemonCardStackScreen() {
     setPokemonStack(nextPokemonList);
   }, [pokemonNamesList]);
   
+  // 0...1
+  const swipeProgressPercent = useSharedValue(0);
 
   const handleSwipeRight: OnPokemonCardSwipeRightEvent = (pokemonNameItem) => {
     console.log(`Liked: ${pokemonNameItem.pokemonID}`);
@@ -50,6 +43,9 @@ export function PokemonCardStackScreen() {
   
   const handleSwipeComplete: OnPokemonCardSwipeCompletedEvent = (pokemonNameItem) => {
     const nextIndex = currentIndex + 1;
+
+    console.log('pokemonStack.leng:',pokemonStack.length)
+
     const pokemonStackNext = pokemonStack.filter((item) => (item.pokemonID !== pokemonNameItem.pokemonID));
 
 
@@ -75,8 +71,8 @@ export function PokemonCardStackScreen() {
               <PokemonCard
                 key={`${item.pokemonID}`} 
                 stackIndex={index}
-                stackIndexAnimated={animatedCurrentIndex}
-                stackSizeCount={pokemonStack.length}
+                stackMaxVisibleCount={MAX_VISIBLE_CARDS}
+                sharedSwipeProgressPercent={swipeProgressPercent}
                 pokemonNameItem={item}
                 pokemonDetailItem={pokemonDetails}
                 onSwipeRight={handleSwipeRight}
